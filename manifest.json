@@ -20,7 +20,7 @@
   "CategoryIcon": "images/actionIcon",
   "UUID": "com.viddie.dice",
   "URL": "https://github.com/viddie/sdDice",
-  "Version": "1.0.7.0",
+  "Version": "2.0.0.0",
   "OS": [{"Platform": "mac", "MinimumVersion": "10.11"}, {"Platform": "windows", "MinimumVersion": "10"}],
   "Software": {"MinimumVersion": "6.4"}
 }
