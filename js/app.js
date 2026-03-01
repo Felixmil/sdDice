@@ -1,19 +1,19 @@
 $SD.on('connected', conn => connected(conn));
 
 var ACTION_UUIDS = [
-    "com.viddie.dice.d4", "com.viddie.dice.d6", "com.viddie.dice.d8",
-    "com.viddie.dice.d10", "com.viddie.dice.d12", "com.viddie.dice.d20",
-    "com.viddie.dice.custom"
+    "com.felixmil.dice.d4", "com.felixmil.dice.d6", "com.felixmil.dice.d8",
+    "com.felixmil.dice.d10", "com.felixmil.dice.d12", "com.felixmil.dice.d20",
+    "com.felixmil.dice.custom"
 ];
 
 var PRESETS = {
-    "com.viddie.dice.d4": { lowerLimit: 1, upperLimit: 4 },
-    "com.viddie.dice.d6": { lowerLimit: 1, upperLimit: 6 },
-    "com.viddie.dice.d8": { lowerLimit: 1, upperLimit: 8 },
-    "com.viddie.dice.d10": { lowerLimit: 1, upperLimit: 10 },
-    "com.viddie.dice.d12": { lowerLimit: 1, upperLimit: 12 },
-    "com.viddie.dice.d20": { lowerLimit: 1, upperLimit: 20 },
-    "com.viddie.dice.custom": null
+    "com.felixmil.dice.d4": { lowerLimit: 1, upperLimit: 4 },
+    "com.felixmil.dice.d6": { lowerLimit: 1, upperLimit: 6 },
+    "com.felixmil.dice.d8": { lowerLimit: 1, upperLimit: 8 },
+    "com.felixmil.dice.d10": { lowerLimit: 1, upperLimit: 10 },
+    "com.felixmil.dice.d12": { lowerLimit: 1, upperLimit: 12 },
+    "com.felixmil.dice.d20": { lowerLimit: 1, upperLimit: 20 },
+    "com.felixmil.dice.custom": null
 };
 
 function connected (jsn) {
@@ -27,13 +27,13 @@ function connected (jsn) {
 }
 
 var DICE_LABELS = {
-	"com.viddie.dice.d4": "d4",
-	"com.viddie.dice.d6": "d6",
-	"com.viddie.dice.d8": "d8",
-	"com.viddie.dice.d10": "d10",
-	"com.viddie.dice.d12": "d12",
-	"com.viddie.dice.d20": "d20",
-	"com.viddie.dice.custom": "d?",
+	"com.felixmil.dice.d4": "d4",
+	"com.felixmil.dice.d6": "d6",
+	"com.felixmil.dice.d8": "d8",
+	"com.felixmil.dice.d10": "d10",
+	"com.felixmil.dice.d12": "d12",
+	"com.felixmil.dice.d20": "d20",
+	"com.felixmil.dice.custom": "d?",
 };
 
 var fontMagnitudes = {
@@ -248,7 +248,7 @@ var diceAction = {
 				handleObj.action
 			);
 		} else {
-			var isCustom = action === "com.viddie.dice.custom";
+			var isCustom = action === "com.felixmil.dice.custom";
 			if (isCustom && jsonObj.payload.hasOwnProperty('lowerLimit')) {
 				handleObj.settings.lowerLimit = parseInt(jsonObj.payload['lowerLimit']) || 1;
 			}
@@ -306,7 +306,7 @@ var diceAction = {
 			var h = handleObj.canvas.height - 2 * margin;
 			ctx.drawImage(img, margin, margin, w, h);
 
-			var isCustom = handleObj.action === "com.viddie.dice.custom";
+			var isCustom = handleObj.action === "com.felixmil.dice.custom";
 			var label, fontSize;
 			if (num === null) {
 				if (!isCustom) {

@@ -2,7 +2,7 @@
 <html>
 
 <head>
-	<title>com.viddie.dice PI</title>
+	<title>com.felixmil.dice PI</title>
 	<meta charset="utf-8" />
 	<link rel="stylesheet" href="css/sdpi.css">
 </head>
@@ -80,7 +80,7 @@
 			if (payloadAction) {
 				var customLimitsEl = document.querySelector("#customLimits");
 				if (customLimitsEl) {
-					customLimitsEl.style.display = payloadAction === "com.viddie.dice.custom" ? "" : "none";
+					customLimitsEl.style.display = payloadAction === "com.felixmil.dice.custom" ? "" : "none";
 				}
 			}
 			if(jsonObj.event === "didReceiveSettings"){
@@ -152,7 +152,7 @@
 			});
 
 			var customLimitsEl = document.querySelector("#customLimits");
-			if (actionInfo === "com.viddie.dice.custom") {
+			if (actionInfo === "com.felixmil.dice.custom") {
 				customLimitsEl.style.display = "";
 			} else {
 				customLimitsEl.style.display = "none";
