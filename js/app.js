@@ -1,30 +1,39 @@
 $SD.on('connected', conn => connected(conn));
 
+var ACTION_UUIDS = [
+    "com.viddie.dice.d4", "com.viddie.dice.d6", "com.viddie.dice.d8",
+    "com.viddie.dice.d10", "com.viddie.dice.d12", "com.viddie.dice.d20",
+    "com.viddie.dice.custom"
+];
+
+var PRESETS = {
+    "com.viddie.dice.d4": { lowerLimit: 1, upperLimit: 4 },
+    "com.viddie.dice.d6": { lowerLimit: 1, upperLimit: 6 },
+    "com.viddie.dice.d8": { lowerLimit: 1, upperLimit: 8 },
+    "com.viddie.dice.d10": { lowerLimit: 1, upperLimit: 10 },
+    "com.viddie.dice.d12": { lowerLimit: 1, upperLimit: 12 },
+    "com.viddie.dice.d20": { lowerLimit: 1, upperLimit: 20 },
+    "com.viddie.dice.custom": null
+};
+
 function connected (jsn) {
     debugLog('Connected Plugin:', jsn);
-
-    /** subscribe to the willAppear event */
-    $SD.on('com.viddie.dice.action.willAppear', jsonObj =>
-        diceAction.onWillAppear(jsonObj)
-    );
-    $SD.on('com.viddie.dice.action.keyDown', jsonObj =>
-        diceAction.onKeyDown(jsonObj)
-    );
-    $SD.on('com.viddie.dice.action.keyUp', jsonObj =>
-        diceAction.onKeyUp(jsonObj)
-    );
-    $SD.on('com.viddie.dice.action.sendToPlugin', jsonObj =>
-        diceAction.onSendToPlugin(jsonObj)
-    );
+    ACTION_UUIDS.forEach(function (uuid) {
+        $SD.on(uuid + ".willAppear", jsonObj => diceAction.onWillAppear(jsonObj));
+        $SD.on(uuid + ".keyDown", jsonObj => diceAction.onKeyDown(jsonObj));
+        $SD.on(uuid + ".keyUp", jsonObj => diceAction.onKeyUp(jsonObj));
+        $SD.on(uuid + ".sendToPlugin", jsonObj => diceAction.onSendToPlugin(jsonObj));
+    });
 }
 
-var results = {
-	"1": "images/dice-one-solid.svg",
-	"2": "images/dice-two-solid.svg",
-	"3": "images/dice-three-solid.svg",
-	"4": "images/dice-four-solid.svg",
-	"5": "images/dice-five-solid.svg",
-	"6": "images/dice-six-solid.svg",
+var DICE_LABELS = {
+	"com.viddie.dice.d4": "d4",
+	"com.viddie.dice.d6": "d6",
+	"com.viddie.dice.d8": "d8",
+	"com.viddie.dice.d10": "d10",
+	"com.viddie.dice.d12": "d12",
+	"com.viddie.dice.d20": "d20",
+	"com.viddie.dice.custom": "d?",
 };
 
 var fontMagnitudes = {
@@ -39,280 +48,337 @@ var fontMagnitudes = {
 	"other": [25, 2],
 };
 
-    	var diceAction = {
-			type : "com.viddie.dice.action",
-			
-			cache: {},
-			lastContext: null,
-			defaultHandleObj: {
-				timer: null,
-				canvas: null,
-				hadLongPress: false,
-				
-				settings: {
-					lowerLimit: 1,
-					upperLimit: 6,
-					diceAmount: 1,
-					median: false,
-					addValue: 0,
-					disableDF: false,
-					lastRoll: null,
-				},
-			},
-			
-			getHandleObjFromCache: function(context){
-				let handleObj = this.cache[context];
-				if(handleObj === undefined){
-					handleObj = JSON.parse(JSON.stringify(this.defaultHandleObj));
-					this.cache[context] = handleObj;
+/** Map upperLimit to dice shape: d4=triangle, d6=square, d8=double-triangle, d10/d12=pentagon, d20=hexagon */
+function getDiceShape(upperLimit) {
+	var n = parseInt(upperLimit, 10) || 20;
+	if (n === 6) return "square";
+	if (n === 4) return "triangle";
+	if (n === 8) return "double-triangle";
+	if (n === 10 || n === 12) return "pentagon";
+	if (n === 20) return "hexagon";
+	return n <= 6 ? "square" : n <= 8 ? "double-triangle" : n <= 12 ? "pentagon" : "hexagon";
+}
+
+var SHAPE_SVGS = {
+	triangle: "images/shape-triangle.svg",
+	"double-triangle": "images/shape-double-triangle.svg",
+	square: "images/shape-square.svg",
+	pentagon: "images/shape-pentagon.svg",
+	hexagon: "images/shape-hexagon.svg"
+};
+
+var diceAction = {
+	cache: {},
+	lastContext: null,
+	defaultHandleObj: {
+		action: null,
+		timer: null,
+		resultTimer: null,
+		doublePressTimer: null,
+		canvas: null,
+		hadLongPress: false,
+		settings: {
+			lowerLimit: 1,
+			upperLimit: 6,
+			diceAmount: 1,
+			median: false,
+			addValue: 0,
+			lastRoll: null,
+		},
+	},
+
+	getHandleObjFromCache: function(context) {
+		let handleObj = this.cache[context];
+		if (handleObj === undefined) {
+			handleObj = JSON.parse(JSON.stringify(this.defaultHandleObj));
+			this.cache[context] = handleObj;
+		}
+		return handleObj;
+	},
+
+	onKeyDown: function(jsonObj) {
+		var context = jsonObj.context;
+		lastContext = context;
+		let handleObj = this.getHandleObjFromCache(context);
+
+		clearTimeout(handleObj.resultTimer);
+		handleObj.resultTimer = null;
+		handleObj.timer = setTimeout(function() {
+			handleObj.hadLongPress = true;
+			diceAction.updateSettings(context, {lastRoll: null});
+			diceAction.setDiceRoll(context, null);
+		}, 500);
+	},
+
+	onKeyUp: function(jsonObj) {
+		var context = jsonObj.context;
+		lastContext = context;
+		let handleObj = this.getHandleObjFromCache(context);
+
+		clearTimeout(handleObj.timer);
+
+		if (handleObj.hadLongPress) {
+			handleObj.hadLongPress = false;
+			return;
+		}
+
+		// If a double-press timer is already running, this is the second press
+		if (handleObj.doublePressTimer !== null) {
+			clearTimeout(handleObj.doublePressTimer);
+			handleObj.doublePressTimer = null;
+			diceAction.rollAdvantage(context);
+			return;
+		}
+
+		// First press — roll immediately, then open a 300ms double-press window
+		diceAction.rollSingle(context);
+		handleObj.doublePressTimer = setTimeout(function() {
+			handleObj.doublePressTimer = null;
+		}, 300);
+	},
+
+	rollSingle: function(context) {
+		let handleObj = this.getHandleObjFromCache(context);
+
+		var rolls = [];
+		var lastRoll = 0;
+		for (let i = 0; i < handleObj.settings.diceAmount; i++) {
+			rolls.push(Math.floor(Math.random() * (handleObj.settings.upperLimit - handleObj.settings.lowerLimit + 1) + handleObj.settings.lowerLimit));
+		}
+
+		if (handleObj.settings.median) {
+			rolls = rolls.sort();
+			var len = rolls.length;
+			var mid = Math.ceil(len / 2);
+			lastRoll = len % 2 == 0 ? rolls[mid] : rolls[mid - 1];
+		} else {
+			rolls.forEach(function(value) { lastRoll += value; });
+		}
+
+		lastRoll += handleObj.settings.addValue;
+
+		diceAction.updateSettings(context, {lastRoll: lastRoll});
+		diceAction.setDiceRoll(context, lastRoll);
+		diceAction.startResultTimer(context);
+	},
+
+	rollAdvantage: function(context) {
+		let handleObj = this.getHandleObjFromCache(context);
+
+		var roll1 = Math.floor(Math.random() * (handleObj.settings.upperLimit - handleObj.settings.lowerLimit + 1) + handleObj.settings.lowerLimit);
+		var roll2 = Math.floor(Math.random() * (handleObj.settings.upperLimit - handleObj.settings.lowerLimit + 1) + handleObj.settings.lowerLimit);
+
+		diceAction.updateSettings(context, {lastRoll: null});
+		diceAction.setAdvantageRoll(context, roll1, roll2);
+		diceAction.startResultTimer(context);
+	},
+
+	startResultTimer: function(context) {
+		let handleObj = this.getHandleObjFromCache(context);
+		clearTimeout(handleObj.resultTimer);
+		handleObj.resultTimer = setTimeout(function() {
+			diceAction.updateSettings(context, {lastRoll: null});
+			diceAction.setDiceRoll(context, null);
+		}, 10000);
+	},
+
+	onWillAppear: function(jsonObj) {
+		var context = jsonObj.context;
+		var action = jsonObj.action;
+		var settings = jsonObj.payload.settings;
+		lastContext = context;
+		let handleObj = this.getHandleObjFromCache(context);
+		handleObj.action = action;
+
+		var preset = PRESETS[action];
+		if (preset) {
+			handleObj.settings.lowerLimit = preset.lowerLimit;
+			handleObj.settings.upperLimit = preset.upperLimit;
+		}
+
+		if (settings != null) {
+			if (settings.hasOwnProperty('lastRoll')) {
+				handleObj.settings.lastRoll = settings["lastRoll"];
+				if (handleObj.settings.lastRoll === undefined || isNaN(handleObj.settings.lastRoll)) {
+					handleObj.settings.lastRoll = null;
 				}
-				return handleObj;
-			},
-			
-			onKeyDown : function(jsonObj) {
-				var context = jsonObj.context;
-				lastContext = context;
-				let handleObj = this.getHandleObjFromCache(context);
-                
-				handleObj.timer = setTimeout(function () {
-					handleObj.hadLongPress = true;
-					diceAction.updateSettings(context, {lastRoll: null});
-					diceAction.setDiceRoll(context, null);
-				},500);
-			},
-			
-			onKeyUp : function(jsonObj) {
-			    var context = jsonObj.context;
-			    var settings = jsonObj.payload.settings;
-				lastContext = context;
-				let handleObj = this.getHandleObjFromCache(context);
-				
-                clearTimeout(handleObj.timer);
-				
-				if(handleObj.hadLongPress){
-					handleObj.hadLongPress = false;
-					return;
+			}
+			if (!preset) {
+				if (settings.hasOwnProperty('lowerLimit')) {
+					handleObj.settings.lowerLimit = parseInt(settings["lowerLimit"]) || 1;
 				}
-				
-				rolls = [];
-				lastRoll = 0;
-				for (let i = 0; i < handleObj.settings.diceAmount; i++)
+				if (settings.hasOwnProperty('upperLimit')) {
+					handleObj.settings.upperLimit = parseInt(settings["upperLimit"]) || 6;
+				}
+			}
+			if (settings.hasOwnProperty('diceAmount')) {
+				handleObj.settings.diceAmount = parseInt(settings["diceAmount"]) || 1;
+			}
+			if (settings.hasOwnProperty('median')) {
+				handleObj.settings.median = Boolean(settings["median"]) || false;
+			}
+			if (settings.hasOwnProperty('addValue')) {
+				handleObj.settings.addValue = parseInt(settings["addValue"]) || 0;
+			}
+		}
+
+		this.setDiceRoll(context, handleObj.settings.lastRoll);
+		if (handleObj.settings.lastRoll !== null) {
+			diceAction.startResultTimer(context);
+		}
+	},
+
+	onSendToPlugin: function(jsonObj) {
+		var context = jsonObj.context;
+		var action = jsonObj.action;
+		let handleObj = this.getHandleObjFromCache(context);
+		if (!handleObj.action) handleObj.action = action;
+
+		if (jsonObj.payload.hasOwnProperty('DATAREQUEST')) {
+			$SD.api.sendToPropertyInspector(
+				context,
 				{
-					rolls.push(Math.floor(Math.random()*(handleObj.settings.upperLimit-handleObj.settings.lowerLimit+1)+handleObj.settings.lowerLimit));
-				}
-				
-				if (handleObj.settings.median) {
-					rolls = rolls.sort();
-					len = rolls.length;
-					mid = Math.ceil(len / 2);
-					lastRoll = len % 2 == 0 ? rolls[mid] : rolls[mid - 1];
-				}
-				else {
-					rolls.forEach(function(value, index, array) { lastRoll += value; });
-				}
-				
-				lastRoll += handleObj.settings.addValue;
-				
-				console.log("Rolled a: "+lastRoll);
-				
-				diceAction.updateSettings(context, {lastRoll: lastRoll});
-				this.setDiceRoll(context, lastRoll);
-			},
-			
-			onWillAppear : function(jsonObj) {
-				var context = jsonObj.context;
-			    var settings = jsonObj.payload.settings;
-				lastContext = context;
-				let handleObj = this.getHandleObjFromCache(context);
-				
-				if(settings != null){
-					if(settings.hasOwnProperty('lastRoll')){
-						handleObj.settings.lastRoll = settings["lastRoll"];
-						if(handleObj.settings.lastRoll === undefined || isNaN(handleObj.settings.lastRoll)){
-							handleObj.settings.lastRoll = null;
-						}
-					}
-					if(settings.hasOwnProperty('lowerLimit')){
-						handleObj.settings.lowerLimit = parseInt(settings["lowerLimit"]) || 1;
-					}
-					if(settings.hasOwnProperty('upperLimit')){
-						handleObj.settings.upperLimit = parseInt(settings["upperLimit"]) || 6;
-					}
-					if(settings.hasOwnProperty('diceAmount')){
-						handleObj.settings.diceAmount = parseInt(settings["diceAmount"]) || 1;
-					}
-					if(settings.hasOwnProperty('median')){
-						handleObj.settings.median = Boolean(settings["median"]) || false;
-					}
-					if(settings.hasOwnProperty('addValue')){
-						handleObj.settings.addValue = parseInt(settings["addValue"]) || 0;
-					}
-					if(settings.hasOwnProperty('disableDF')){
-						handleObj.settings.disableDF = Boolean(settings["disableDF"]) || false;
-					}
-				}
-				
-				this.setDiceRoll(context, handleObj.settings.lastRoll);
-			},
-			
-			onSendToPlugin: function(jsonObj){
-				var context = jsonObj.context;
-				let handleObj = this.getHandleObjFromCache(context);
-				
-				if (jsonObj.payload.hasOwnProperty('DATAREQUEST')) {
-					$SD.api.sendToPropertyInspector(
-						jsonObj.context,
-						{
-							lowerLimit: handleObj.settings.lowerLimit,
-							upperLimit: handleObj.settings.upperLimit,
-							diceAmount: handleObj.settings.diceAmount,
-							median: handleObj.settings.median,
-							addValue: handleObj.settings.addValue,
-							disableDF: handleObj.settings.disableDF,
-						},
-						this.type
-					);
-				} else {
-					if (jsonObj.payload.hasOwnProperty('lowerLimit')) {
-						const val = parseInt(jsonObj.payload['lowerLimit']) || 1;
-						handleObj.settings.lowerLimit = val;
-					}
-					if (jsonObj.payload.hasOwnProperty('upperLimit')) {
-						const val = parseInt(jsonObj.payload['upperLimit']) || 6;
-						handleObj.settings.upperLimit = val;
-					}
-					if (jsonObj.payload.hasOwnProperty('diceAmount')) {
-						const val = parseInt(jsonObj.payload['diceAmount']) || 1;
-						handleObj.settings.diceAmount = val;
-					}
-					if (jsonObj.payload.hasOwnProperty('median')) {
-						const val = Boolean(jsonObj.payload['median']) || false;
-						handleObj.settings.median = val;
-					}
-					if (jsonObj.payload.hasOwnProperty('addValue')) {
-						const val = parseInt(jsonObj.payload['addValue']) || 0;
-						handleObj.settings.addValue = val;
-					}					
-					if (jsonObj.payload.hasOwnProperty('disableDF')) {
-						const val = Boolean(jsonObj.payload['disableDF']) || false;
-						handleObj.settings.disableDF = val;
-					}
-					
-					if(handleObj.settings.lowerLimit > handleObj.settings.upperLimit){
-						let temp = handleObj.settings.lowerLimit;
-						handleObj.settings.lowerLimit = handleObj.settings.upperLimit;
-						handleObj.settings.upperLimit = temp;
-					}
-	
-					diceAction.updateSettings(context, {
-						lowerLimit: handleObj.settings.lowerLimit,
-						upperLimit: handleObj.settings.upperLimit,
-						diceAmount: handleObj.settings.diceAmount,
-						median: handleObj.settings.median,
-						addValue: handleObj.settings.addValue,
-						disableDF: handleObj.settings.disableDF,
-					});
-				}
-			},
-			
-			setDiceRoll : function(context, num){
-				let handleObj = this.getHandleObjFromCache(context);
+					action: handleObj.action,
+					lowerLimit: handleObj.settings.lowerLimit,
+					upperLimit: handleObj.settings.upperLimit,
+					diceAmount: handleObj.settings.diceAmount,
+					median: handleObj.settings.median,
+					addValue: handleObj.settings.addValue,
+				},
+				handleObj.action
+			);
+		} else {
+			var isCustom = action === "com.viddie.dice.custom";
+			if (isCustom && jsonObj.payload.hasOwnProperty('lowerLimit')) {
+				handleObj.settings.lowerLimit = parseInt(jsonObj.payload['lowerLimit']) || 1;
+			}
+			if (isCustom && jsonObj.payload.hasOwnProperty('upperLimit')) {
+				handleObj.settings.upperLimit = parseInt(jsonObj.payload['upperLimit']) || 6;
+			}
+			if (jsonObj.payload.hasOwnProperty('diceAmount')) {
+				handleObj.settings.diceAmount = parseInt(jsonObj.payload['diceAmount']) || 1;
+			}
+			if (jsonObj.payload.hasOwnProperty('median')) {
+				handleObj.settings.median = Boolean(jsonObj.payload['median']) || false;
+			}
+			if (jsonObj.payload.hasOwnProperty('addValue')) {
+				handleObj.settings.addValue = parseInt(jsonObj.payload['addValue']) || 0;
+			}
+			if (isCustom && handleObj.settings.lowerLimit > handleObj.settings.upperLimit) {
+				var t = handleObj.settings.lowerLimit;
+				handleObj.settings.lowerLimit = handleObj.settings.upperLimit;
+				handleObj.settings.upperLimit = t;
+			}
 
-				
-				if(handleObj.canvas === null){
-					handleObj.canvas = document.createElement("canvas");
-					handleObj.canvas.width = 144;
-					handleObj.canvas.height = 144;
-					handleObj.canvas.context = context;
+			diceAction.updateSettings(context, {
+				lowerLimit: handleObj.settings.lowerLimit,
+				upperLimit: handleObj.settings.upperLimit,
+				diceAmount: handleObj.settings.diceAmount,
+				median: handleObj.settings.median,
+				addValue: handleObj.settings.addValue,
+			});
+		}
+	},
+
+	setDiceRoll: function(context, num) {
+		let handleObj = this.getHandleObjFromCache(context);
+		var upperLimit = handleObj.settings.upperLimit;
+		var shape = getDiceShape(upperLimit);
+
+		if (handleObj.canvas === null) {
+			handleObj.canvas = document.createElement("canvas");
+			handleObj.canvas.width = 144;
+			handleObj.canvas.height = 144;
+			handleObj.canvas.context = context;
+		}
+
+		let ctx = handleObj.canvas.getContext("2d");
+		ctx.filter = "none";
+		ctx.fillStyle = "#0A1423";
+		ctx.fillRect(0, 0, handleObj.canvas.width, handleObj.canvas.height);
+
+		var shapeUrl = SHAPE_SVGS[shape] || SHAPE_SVGS.square;
+		var img = new Image();
+		img.onload = function() {
+			var cx = handleObj.canvas.width / 2, cy = handleObj.canvas.height / 2;
+			var margin = 16;
+			var w = handleObj.canvas.width - 2 * margin;
+			var h = handleObj.canvas.height - 2 * margin;
+			ctx.drawImage(img, margin, margin, w, h);
+
+			var isCustom = handleObj.action === "com.viddie.dice.custom";
+			var label, fontSize;
+			if (num === null) {
+				if (!isCustom) {
+					var dLabel = DICE_LABELS[handleObj.action] || ("d" + handleObj.settings.upperLimit);
+					label = dLabel;
+					fontSize = dLabel.length <= 2 ? 36 : 30;
 				}
-				
-				let ctx = handleObj.canvas.getContext("2d");
-				ctx.filter = "none";
-				ctx.fillStyle = "#0A1423";
-				ctx.fillRect(0, 0, handleObj.canvas.width, handleObj.canvas.height);
-				
-				
-				if(!handleObj.settings.disableDF && (num === null || (num <= 6 && num >= 1))){
-					let resImageURL = "images/pluginIcon.png";
-					if(num <= 6 && num >= 1){
-						resImageURL = results[""+num];
-					}
-					
-					
-					let img = new Image();
-					img.onload = () => {
-						ctx.filter = "brightness(0) saturate(100%) invert(38%) sepia(62%) saturate(2063%) hue-rotate(209deg) brightness(90%) contrast(95%)";
-
-						var handleObj = this.getHandleObjFromCache(context);
-
-						var imageMargin = 20;
-						var imageAspectRatio = img.width / img.height;
-						var canvasAspectRatio = handleObj.canvas.width / handleObj.canvas.height;
-						var renderableHeight, renderableWidth, xStart, yStart;
-
-						// If image's aspect ratio is less than canvas's we fit on height
-						// and place the image centrally along width
-						if(imageAspectRatio < canvasAspectRatio) {
-							renderableHeight = handleObj.canvas.height;
-							renderableWidth = img.width * (renderableHeight / img.height);
-							xStart = (handleObj.canvas.width - renderableWidth) / 2;
-							yStart = 0;
-						}
-
-						// If image's aspect ratio is greater than canvas's we fit on width
-						// and place the image centrally along height
-						else if(imageAspectRatio > canvasAspectRatio) {
-							renderableWidth = handleObj.canvas.width
-							renderableHeight = img.height * (renderableWidth / img.width);
-							xStart = 0;
-							yStart = (handleObj.canvas.height - renderableHeight) / 2;
-						}
-
-						// Happy path - keep aspect ratio
-						else {
-							renderableHeight = handleObj.canvas.height;
-							renderableWidth = handleObj.canvas.width;
-							xStart = 0;
-							yStart = 0;
-						}
-						ctx.drawImage(img, xStart+imageMargin, yStart+imageMargin, renderableWidth-(2*imageMargin), renderableHeight-(2*imageMargin));
-						$SD.api.setImage(context, handleObj.canvas.toDataURL());
-					};
-					img.src = resImageURL;
-					
-				} else {
-					let magnitude = 1;
-					if(num != 0){
-						magnitude = Math.floor(Math.log10(Math.abs(num)));
-					}
-					
-					let fontSize = fontMagnitudes[""+magnitude][0];
-					if(fontSize === undefined){
-						fontSize = fontMagnitudes.other[0];
-					}
-					
-					if(num < 0 && magnitude > 1){
-						fontSize -= fontMagnitudes[""+magnitude][1] || 2;
-					}
-					
-					ctx.fillStyle = "#3A6CDF";
-					ctx.textAlign = "center";
-					ctx.textBaseline = "middle";
-					ctx.font = fontSize+"px Arial";
-					ctx.fillText(""+num, handleObj.canvas.width/2, handleObj.canvas.height/2);
-					$SD.api.setImage(context, handleObj.canvas.toDataURL());
+			} else {
+				label = "" + num;
+				var magnitude = num !== 0 ? Math.floor(Math.log10(Math.abs(num))) : 1;
+				fontSize = (fontMagnitudes["" + magnitude] || fontMagnitudes.other)[0];
+				if (num < 0 && magnitude > 1) {
+					fontSize -= (fontMagnitudes["" + magnitude] || [0, 2])[1] || 2;
 				}
-			},
-			
-			/* Helper function to set settings while keeping all other fields unchanged */
-			updateSettings: function(context, settings){
-				let handleObj = this.getHandleObjFromCache(context);
-				let updatedSettings = handleObj.settings;
-				
-				for(let field in settings){
-					updatedSettings[field] = settings[field];
-				}
-				
-				$SD.api.setSettings(context, updatedSettings);
-			},
+			}
+			if (label) {
+				ctx.fillStyle = "#FFFFFF";
+				ctx.textAlign = "center";
+				ctx.textBaseline = "middle";
+				ctx.font = fontSize + "px Arial";
+				ctx.fillText(label, cx, cy);
+			}
+			$SD.api.setImage(context, handleObj.canvas.toDataURL());
 		};
+		img.src = shapeUrl;
+	},
+
+	setAdvantageRoll: function(context, roll1, roll2) {
+		let handleObj = this.getHandleObjFromCache(context);
+		var upperLimit = handleObj.settings.upperLimit;
+		var shape = getDiceShape(upperLimit);
+
+		if (handleObj.canvas === null) {
+			handleObj.canvas = document.createElement("canvas");
+			handleObj.canvas.width = 144;
+			handleObj.canvas.height = 144;
+			handleObj.canvas.context = context;
+		}
+
+		let ctx = handleObj.canvas.getContext("2d");
+		ctx.filter = "none";
+		ctx.fillStyle = "#0A1423";
+		ctx.fillRect(0, 0, handleObj.canvas.width, handleObj.canvas.height);
+
+		var shapeUrl = SHAPE_SVGS[shape] || SHAPE_SVGS.square;
+		var img = new Image();
+		img.onload = function() {
+			var cx = handleObj.canvas.width / 2, cy = handleObj.canvas.height / 2;
+			var margin = 16;
+			var w = handleObj.canvas.width - 2 * margin;
+			var h = handleObj.canvas.height - 2 * margin;
+			ctx.drawImage(img, margin, margin, w, h);
+
+			ctx.fillStyle = "#FFFFFF";
+			ctx.textAlign = "center";
+			ctx.textBaseline = "middle";
+			ctx.font = "28px Arial";
+			ctx.fillText(roll1 + " | " + roll2, cx, cy);
+			$SD.api.setImage(context, handleObj.canvas.toDataURL());
+		};
+		img.src = shapeUrl;
+	},
+
+	/* Helper function to set settings while keeping all other fields unchanged */
+	updateSettings: function(context, settings) {
+		let handleObj = this.getHandleObjFromCache(context);
+		let updatedSettings = handleObj.settings;
+
+		for (let field in settings) {
+			updatedSettings[field] = settings[field];
+		}
+
+		$SD.api.setSettings(context, updatedSettings);
+	},
+};

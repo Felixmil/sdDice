@@ -1,41 +1,26 @@
 {
+  "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
   "Actions": [
-    {
-      "Icon": "images/pluginIcon", 
-      "Name": "Dice", 
-      "States": [
-        {
-          "Image": "images/actionIcon",
-          "TitleAlignment": "middle", 
-          "FontSize": "16"
-        }
-      ], 
-      "SupportedInMultiActions": false,
-      "Tooltip": "Roll a dice.", 
-      "UUID": "com.viddie.dice.action"
-    }
-  ], 
-  "SDKVersion": 2,
-  "Author": "viddie", 
-  "CodePath": "index.html", 
-  "PropertyInspectorPath": "propertyinspector/index.html",
-  "Description": "A simple plugin to roll a dice or any other range, your choice", 
-  "Name": "Dice", 
-  "Icon": "images/actionIcon", 
-  "URL": "https://github.com/viddie/sdDice", 
-  "Version": "1.0.4",
-  "OS": [
-    {
-        "Platform": "mac", 
-        "MinimumVersion" : "10.11"
-    },
-    {
-        "Platform": "windows", 
-        "MinimumVersion" : "10"
-    }
+    {"Icon": "images/icon-d4", "Name": "d4", "States": [{"Image": "images/icon-d4", "TitleAlignment": "middle", "FontSize": 16}], "Tooltip": "Roll a d4 (1-4)", "UUID": "com.viddie.dice.d4", "PropertyInspectorPath": "propertyinspector/index.html"},
+    {"Icon": "images/icon-d6", "Name": "d6", "States": [{"Image": "images/icon-d6", "TitleAlignment": "middle", "FontSize": 16}], "Tooltip": "Roll a d6 (1-6)", "UUID": "com.viddie.dice.d6", "PropertyInspectorPath": "propertyinspector/index.html"},
+    {"Icon": "images/icon-d8", "Name": "d8", "States": [{"Image": "images/icon-d8", "TitleAlignment": "middle", "FontSize": 16}], "Tooltip": "Roll a d8 (1-8)", "UUID": "com.viddie.dice.d8", "PropertyInspectorPath": "propertyinspector/index.html"},
+    {"Icon": "images/icon-d10", "Name": "d10", "States": [{"Image": "images/icon-d10", "TitleAlignment": "middle", "FontSize": 16}], "Tooltip": "Roll a d10 (1-10)", "UUID": "com.viddie.dice.d10", "PropertyInspectorPath": "propertyinspector/index.html"},
+    {"Icon": "images/icon-d12", "Name": "d12", "States": [{"Image": "images/icon-d12", "TitleAlignment": "middle", "FontSize": 16}], "Tooltip": "Roll a d12 (1-12)", "UUID": "com.viddie.dice.d12", "PropertyInspectorPath": "propertyinspector/index.html"},
+    {"Icon": "images/icon-d20", "Name": "d20", "States": [{"Image": "images/icon-d20", "TitleAlignment": "middle", "FontSize": 16}], "Tooltip": "Roll a d20 (1-20)", "UUID": "com.viddie.dice.d20", "PropertyInspectorPath": "propertyinspector/index.html"},
+    {"Icon": "images/icon-custom", "Name": "Custom", "States": [{"Image": "images/icon-custom", "TitleAlignment": "middle", "FontSize": 16}], "Tooltip": "Roll with custom limits", "UUID": "com.viddie.dice.custom", "PropertyInspectorPath": "propertyinspector/index.html"}
   ],
-  "Software": 
-    {
-        "MinimumVersion" : "4.1"
-    }
+  "SDKVersion": 2,
+  "Author": "viddie",
+  "CodePath": "index.html",
+  "PropertyInspectorPath": "propertyinspector/index.html",
+  "Description": "Roll dice from d4 to d20, or use custom limits.",
+  "Name": "Dice",
+  "Icon": "images/actionIcon",
+  "Category": "Dice",
+  "CategoryIcon": "images/actionIcon",
+  "UUID": "com.viddie.dice",
+  "URL": "https://github.com/viddie/sdDice",
+  "Version": "1.0.7.0",
+  "OS": [{"Platform": "mac", "MinimumVersion": "10.11"}, {"Platform": "windows", "MinimumVersion": "10"}],
+  "Software": {"MinimumVersion": "6.4"}
 }
